@@ -43,7 +43,6 @@ datamodule:
   dataset:
     _target_: audio_data_pytorch.YoutubeDataset
     urls:
-      - https://www.youtube.com/watch?v=EwHstfDWLA0
       - https://www.youtube.com/watch?v=4-fZ1jrlgJ8
       - https://www.youtube.com/watch?v=ryw6LerPdwk
       - https://www.youtube.com/watch?v=EtQhful8nEY
