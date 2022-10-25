@@ -1,128 +1,50 @@
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
+import random
+from typing import Any, Callable, List, Optional
 
-import auraloss
 import librosa
-import plotly.express as px
-import plotly.graph_objects as go
 import plotly.graph_objs as go
 import pytorch_lightning as pl
 import torch
-import torch.nn.functional as F
 import torchaudio
 import wandb
+from a_transformers_pytorch.transformers import Transformer
 from audio_data_pytorch.utils import fractional_random_split
-from einops import rearrange, reduce
+from audio_diffusion_pytorch import AudioDiffusionModel, Sampler, Schedule
+from einops import rearrange, repeat
 from ema_pytorch import EMA
 from pytorch_lightning import Callback, Trainer
 from pytorch_lightning.loggers import LoggerCollection, WandbLogger
-from torch import LongTensor, Tensor, nn
+from torch import Tensor, nn
 from torch.utils.data import DataLoader
+from transformers import AutoTokenizer
 
-
-def exists(val):
-    return val is not None
+""" Model """
 
 
 class Model(pl.LightningModule):
     def __init__(
         self,
         lr: float,
-        lr_eps: float,
         lr_beta1: float,
         lr_beta2: float,
+        lr_eps: float,
         lr_weight_decay: float,
         ema_beta: float,
         ema_power: float,
-        sample_rate: int,
-        autoencoder: nn.Module,
-        loss_autoencoder_path: Optional[nn.Module] = None,
-        loss_layer: int = 0,
-        loss_type: Optional[str] = None,
-        loss_bottleneck_weight: Optional[float] = None,
+        model: nn.Module,
+        embedder: nn.Module,
     ):
         super().__init__()
         self.lr = lr
-        self.lr_eps = lr_eps
         self.lr_beta1 = lr_beta1
         self.lr_beta2 = lr_beta2
+        self.lr_eps = lr_eps
         self.lr_weight_decay = lr_weight_decay
-        self.sample_rate = sample_rate
-        self.loss_type = loss_type
-        self.loss_fn = None
-        self.loss_bottleneck_weight = loss_bottleneck_weight
-
-        self.autoencoder = autoencoder
-        self.autoencoder_ema = EMA(self.autoencoder, beta=ema_beta, power=ema_power)
-
-        if exists(loss_autoencoder_path):
-            self.loss_type = "ae"
-            self.loss_autoencoder = torch.load(
-                loss_autoencoder_path, map_location=self.device
-            )
-            self.loss_autoencoder.requires_grad_(False)
-            self.loss_autoencoder.eval()
-            self.loss_layer = loss_layer
-
-    def get_perceptual_features(self, x: Tensor) -> Tensor:
-        self.loss_autoencoder.eval()
-        _, info = self.loss_autoencoder.encode(x, with_info=True)
-        return info["xs"][self.loss_layer]
-
-    def ae_loss(self, x: Tensor, y: Tensor) -> Tensor:
-        x = self.get_perceptual_features(x)
-        y = self.get_perceptual_features(y)
-        return F.mse_loss(x, y)
-
-    def setup(self, stage):
-        if self.loss_type == "ae":
-            self.loss_fn = self.ae_loss
-        elif self.loss_type == "mrstft":
-            self.loss_fn = auraloss.freq.MultiResolutionSTFTLoss(
-                sample_rate=self.sample_rate,
-                device=self.device,
-            )
-        elif self.loss_type == "sdstft":
-            scales = [2048, 1024, 512, 256, 128]
-            hop_sizes, win_lengths, overlap = [], [], 0.75
-            for scale in scales:
-                hop_sizes += [int(scale * (1.0 - overlap))]
-                win_lengths += [scale]
-            self.loss_fn = auraloss.freq.SumAndDifferenceSTFTLoss(
-                fft_sizes=scales, hop_sizes=hop_sizes, win_lengths=win_lengths
-            )
-        elif self.loss_type == "mse":
-            self.loss_fn = nn.MSELoss()
-
-    def training_step(self, batch, batch_idx):
-        x = batch
-
-        y, info = self.autoencoder(x, with_info=True)
-        loss = self.loss_fn(x, y)
-
-        if "loss" in info:
-            loss_bottleneck = info["loss"]
-            loss += self.loss_bottleneck_weight * loss_bottleneck
-            self.log("loss_bottleneck", loss_bottleneck)
-        if "perplexity" in info:
-            for i, perplexity in enumerate(info["perplexity"]):
-                self.log(f"train_perplexity_{i}", perplexity)
-        if "replaced_codes" in info:
-            for i, replaced_codes in enumerate(info["replaced_codes"]):
-                self.log(f"train_replaced_codes_{i}", replaced_codes)
-
-        self.log("train_loss", loss)
-
-        # Update EMA model and log decay
-        self.autoencoder_ema.update()
-        self.log("ema_decay", self.autoencoder_ema.get_current_decay())
-        return loss
-
-    def validation_step(self, batch, batch_idx):
-        x = batch
-        y = self.autoencoder_ema(x)
-        loss = self.loss_fn(x, y)
-        self.log("valid_loss", loss)
-        return loss
+        # Diffusion Model
+        self.model = model
+        self.model_ema = EMA(self.model, beta=ema_beta, power=ema_power)
+        # Text Encoder
+        self.embedder = embedder
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(
@@ -133,6 +55,23 @@ class Model(pl.LightningModule):
             weight_decay=self.lr_weight_decay,
         )
         return optimizer
+
+    def training_step(self, batch, batch_idx):
+        waveforms, info = batch
+        embedding = self.embedder(info["text"])
+        loss = self.model(waveforms, embedding=embedding)
+        self.log("train_loss", loss)
+        # Update EMA model and log decay
+        self.model_ema.update()
+        self.log("ema_decay", self.model_ema.get_current_decay())
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        waveforms, info = batch
+        embedding = self.embedder(info["text"])
+        loss = self.model_ema(waveforms, embedding=embedding)
+        self.log("valid_loss", loss)
+        return loss
 
 
 """ Datamodule """
@@ -251,23 +190,6 @@ def log_wandb_audio_spectrogram(
     )
 
 
-def log_wandb_embeddings(logger: WandbLogger, id: str, embeddings: Tensor):
-    num_items = embeddings.shape[0]
-    embeddings = embeddings.detach().cpu()
-
-    def get_figure(x):
-        trace = [go.Heatmap(z=x, colorscale="viridis")]
-        fig = go.Figure(data=trace)
-        return fig
-
-    logger.log(
-        {
-            f"embedding_{idx}_{id}": get_figure(embeddings[idx])
-            for idx in range(num_items)
-        }
-    )
-
-
 class SampleLogger(Callback):
     def __init__(
         self,
@@ -275,15 +197,23 @@ class SampleLogger(Callback):
         channels: int,
         sampling_rate: int,
         length: int,
+        sampling_steps: List[int],
+        embedding_scale: int,
+        diffusion_schedule: Schedule,
+        diffusion_sampler: Sampler,
         use_ema_model: bool,
     ) -> None:
         self.num_items = num_items
         self.channels = channels
         self.sampling_rate = sampling_rate
         self.length = length
-        self.epoch_count = 0
-        self.log_next = False
+        self.sampling_steps = sampling_steps
+        self.embedding_scale = embedding_scale
+        self.diffusion_schedule = diffusion_schedule
+        self.diffusion_sampler = diffusion_sampler
         self.use_ema_model = use_ema_model
+
+        self.log_next = False
 
     def on_validation_epoch_start(self, trainer, pl_module):
         self.log_next = True
@@ -302,36 +232,57 @@ class SampleLogger(Callback):
             pl_module.eval()
 
         wandb_logger = get_wandb_logger(trainer).experiment
+        diffusion_model = pl_module.model
 
-        autoencoder = pl_module.autoencoder
         if self.use_ema_model:
-            autoencoder = pl_module.autoencoder_ema.ema_model
+            diffusion_model = pl_module.model_ema.ema_model
 
-        x = batch[0 : self.num_items]
+        waveform, info = batch
+        waveform = waveform[0 : self.num_items]
+        texts = info["text"][0 : self.num_items]
 
         log_wandb_audio_batch(
             logger=wandb_logger,
             id="true",
-            samples=x,
+            samples=waveform,
             sampling_rate=self.sampling_rate,
         )
         log_wandb_audio_spectrogram(
             logger=wandb_logger,
             id="true",
-            samples=x,
+            samples=waveform,
             sampling_rate=self.sampling_rate,
         )
 
-        z = autoencoder.encode(x)
-        y = autoencoder.decode(z)
+        embedding = pl_module.embedder(texts)
 
-        log_wandb_embeddings(logger=wandb_logger, id="z", embeddings=z)
-        log_wandb_audio_batch(
-            logger=wandb_logger, id="recon", samples=y, sampling_rate=self.sampling_rate
+        noise = torch.randn(
+            (self.num_items, self.channels, self.length), device=pl_module.device
         )
-        log_wandb_audio_spectrogram(
-            logger=wandb_logger, id="recon", samples=y, sampling_rate=self.sampling_rate
-        )
+
+        for steps in self.sampling_steps:
+            samples = diffusion_model.sample(
+                noise=noise,
+                embedding=embedding,
+                embedding_scale=self.embedding_scale,
+                sampler=self.diffusion_sampler,
+                sigma_schedule=self.diffusion_schedule,
+                num_steps=steps,
+            )
+            log_wandb_audio_batch(
+                logger=wandb_logger,
+                id="sample",
+                samples=samples,
+                sampling_rate=self.sampling_rate,
+                caption=f"Sampled in {steps} steps",
+            )
+            log_wandb_audio_spectrogram(
+                logger=wandb_logger,
+                id="sample",
+                samples=samples,
+                sampling_rate=self.sampling_rate,
+                caption=f"Sampled in {steps} steps",
+            )
 
         if is_train:
             pl_module.train()
