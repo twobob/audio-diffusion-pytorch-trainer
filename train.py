@@ -35,7 +35,7 @@ def main(config: DictConfig) -> None:
     if "save" in config:
         # Ignore loggers and other callbacks
         with open_dict(config):
-            config.pop("loggers")
+            #config.pop("loggers")
             config.pop("callbacks")
             config.trainer.num_sanity_val_steps = 0
         attribute, path = config.get("save"), config.get("ckpt_dir")
@@ -45,20 +45,20 @@ def main(config: DictConfig) -> None:
     if "callbacks" in config:
         for _, cb_conf in config["callbacks"].items():
             if "_target_" in cb_conf:
-                log.info(f"Instantiating callback <{cb_conf._target_}>.")
+                #log.info(f"Instantiating callback <{cb_conf._target_}>.")
                 callbacks.append(hydra.utils.instantiate(cb_conf, _convert_="partial"))
 
     # Initialize loggers (e.g. wandb)
-    loggers = []
-    if "loggers" in config:
-        for _, lg_conf in config["loggers"].items():
-            if "_target_" in lg_conf:
-                log.info(f"Instantiating logger <{lg_conf._target_}>.")
-                # Sometimes wandb throws error if slow connection...
-                logger = utils.retry_if_error(
-                    lambda: hydra.utils.instantiate(lg_conf, _convert_="partial")
-                )
-                loggers.append(logger)
+    #loggers = []
+    #if "loggers" in config:
+    #    for _, lg_conf in config["loggers"].items():
+    #        if "_target_" in lg_conf:
+    #            log.info(f"Instantiating logger <{lg_conf._target_}>.")
+    #            # Sometimes wandb throws error if slow connection...
+    #            logger = utils.retry_if_error(
+    #                lambda: hydra.utils.instantiate(lg_conf, _convert_="partial")
+    #            )
+    #            loggers.append(logger)#
 
     # Initialize trainer
     log.info(f"Instantiating trainer <{config.trainer._target_}>.")
@@ -68,14 +68,14 @@ def main(config: DictConfig) -> None:
 
     # Send some parameters from config to all lightning loggers
     log.info("Logging hyperparameters!")
-    utils.log_hyperparameters(
-        config=config,
-        model=model,
-        datamodule=datamodule,
-        trainer=trainer,
-        callbacks=callbacks,
-        logger=loggers,
-    )
+    #utils.log_hyperparameters(
+    #    config=config,
+    #    model=model,
+    #    datamodule=datamodule,
+    #    trainer=trainer,
+    #    callbacks=callbacks,
+    #    logger=loggers,
+    #)
 
     # Train with checkpoint if present, otherwise from start
     if "ckpt" in config:
@@ -94,7 +94,7 @@ def main(config: DictConfig) -> None:
         datamodule=datamodule,
         trainer=trainer,
         callbacks=callbacks,
-        logger=loggers,
+        #logger=loggers,
     )
 
     # Print path to best checkpoint
