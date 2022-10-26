@@ -8,7 +8,7 @@ from omegaconf import DictConfig, open_dict
 
 # Load environment variables from `.env`.
 dotenv.load_dotenv(override=True)
-log = utils.get_logger(__name__)
+#log = utils.get_logger(__name__)
 
 
 @hydra.main(config_path=".", config_name="config.yaml", version_base=None)
@@ -21,11 +21,11 @@ def main(config: DictConfig) -> None:
     pl.seed_everything(config.seed)
 
     # Initialize datamodule
-    log.info(f"Instantiating datamodule <{config.datamodule._target_}>.")
+    #log.info(f"Instantiating datamodule <{config.datamodule._target_}>.")
     datamodule = hydra.utils.instantiate(config.datamodule, _convert_="partial")
 
     # Initialize model
-    log.info(f"Instantiating model <{config.model._target_}>.")
+    #log.info(f"Instantiating model <{config.model._target_}>.")
     model = hydra.utils.instantiate(config.model, _convert_="partial")
 
     # Initialize all callbacks (e.g. checkpoints, early stopping)
@@ -61,13 +61,13 @@ def main(config: DictConfig) -> None:
     #            loggers.append(logger)#
 
     # Initialize trainer
-    log.info(f"Instantiating trainer <{config.trainer._target_}>.")
+    #log.info(f"Instantiating trainer <{config.trainer._target_}>.")
     trainer = hydra.utils.instantiate(
         config.trainer, callbacks=callbacks, logger=loggers, _convert_="partial"
     )
 
     # Send some parameters from config to all lightning loggers
-    log.info("Logging hyperparameters!")
+    #log.info("Logging hyperparameters!")
     #utils.log_hyperparameters(
     #    config=config,
     #    model=model,
@@ -80,14 +80,14 @@ def main(config: DictConfig) -> None:
     # Train with checkpoint if present, otherwise from start
     if "ckpt" in config:
         ckpt = config.get("ckpt")
-        log.info(f"Starting training from {ckpt}")
+        #log.info(f"Starting training from {ckpt}")
         trainer.fit(model=model, datamodule=datamodule, ckpt_path=ckpt)
     else:
-        log.info("Starting training.")
+        #log.info("Starting training.")
         trainer.fit(model=model, datamodule=datamodule)
 
     # Make sure everything closed properly
-    log.info("Finalizing!")
+    #log.info("Finalizing!")
     utils.finish(
         config=config,
         model=model,
@@ -103,7 +103,7 @@ def main(config: DictConfig) -> None:
         and config.get("train")
         and not config.get("save")
     ):
-        log.info(f"Best model ckpt at {trainer.checkpoint_callback.best_model_path}")
+        #log.info(f"Best model ckpt at {trainer.checkpoint_callback.best_model_path}")
 
 
 if __name__ == "__main__":
