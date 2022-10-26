@@ -185,63 +185,63 @@ class Datamodule(pl.LightningDataModule):
 #    )
 
 
-#class SampleLogger(Callback):
-#    def __init__(
-#        self,
-#        num_items: int,
-#        channels: int,
-#        sampling_rate: int,
-#        length: int,
-#        sampling_steps: List[int],
-#        diffusion_schedule: Schedule,
-#        diffusion_sampler: Sampler,
-#        use_ema_model: bool,
-#    ) -> None:
-#        self.num_items = num_items
-#        self.channels = channels
-#        self.sampling_rate = sampling_rate
-#        self.length = length
-#        self.sampling_steps = sampling_steps
-#        self.diffusion_schedule = diffusion_schedule
-#        self.diffusion_sampler = diffusion_sampler
-#        self.use_ema_model = use_ema_model#
-#
-#        self.log_next = False#
-#
-#    def on_validation_epoch_start(self, trainer, pl_module):
-#        self.log_next = True
-#
-#    def on_validation_batch_start(
-#        self, trainer, pl_module, batch, batch_idx, dataloader_idx
-#    ):
-#        if self.log_next:
-#            self.log_sample(trainer, pl_module, batch)
-#            self.log_next = False
-#
-#    @torch.no_grad()
-#    def log_sample(self, trainer, pl_module, batch):
-#        is_train = pl_module.training
-#        if is_train:
-#            pl_module.eval()#
-#
+class SampleLogger(Callback):
+    def __init__(
+        self,
+        num_items: int,
+        channels: int,
+        sampling_rate: int,
+        length: int,
+        sampling_steps: List[int],
+        diffusion_schedule: Schedule,
+        diffusion_sampler: Sampler,
+        use_ema_model: bool,
+    ) -> None:
+        self.num_items = num_items
+        self.channels = channels
+        self.sampling_rate = sampling_rate
+        self.length = length
+        self.sampling_steps = sampling_steps
+        self.diffusion_schedule = diffusion_schedule
+        self.diffusion_sampler = diffusion_sampler
+        self.use_ema_model = use_ema_model#
+
+        self.log_next = False#
+
+    def on_validation_epoch_start(self, trainer, pl_module):
+        self.log_next = True
+
+    def on_validation_batch_start(
+        self, trainer, pl_module, batch, batch_idx, dataloader_idx
+    ):
+        if self.log_next:
+            self.log_sample(trainer, pl_module, batch)
+            self.log_next = False
+
+    @torch.no_grad()
+    def log_sample(self, trainer, pl_module, batch):
+        is_train = pl_module.training
+        if is_train:
+            pl_module.eval()#
+
 #        wandb_logger = get_wandb_logger(trainer).experiment
-#
-#        diffusion_model = pl_module.model
-#        if self.use_ema_model:
-#            diffusion_model = pl_module.model_ema.ema_model
-#
-#        # Get start diffusion noise
-#        noise = torch.randn(
-#            (self.num_items, self.channels, self.length), device=pl_module.device
-#        )
-#
-#        for steps in self.sampling_steps:
-#            samples = diffusion_model.sample(
-#                noise=noise,
-#                sampler=self.diffusion_sampler,
-#                sigma_schedule=self.diffusion_schedule,
-#                num_steps=steps,
-#            )
+
+        diffusion_model = pl_module.model
+        if self.use_ema_model:
+            diffusion_model = pl_module.model_ema.ema_model
+
+        # Get start diffusion noise
+        noise = torch.randn(
+            (self.num_items, self.channels, self.length), device=pl_module.device
+        )
+
+        for steps in self.sampling_steps:
+            samples = diffusion_model.sample(
+                noise=noise,
+                sampler=self.diffusion_sampler,
+                sigma_schedule=self.diffusion_schedule,
+                num_steps=steps,
+            )
 #            log_wandb_audio_batch(
 #                logger=wandb_logger,
 #                id="sample",
@@ -257,5 +257,5 @@ class Datamodule(pl.LightningDataModule):
 #                caption=f"Sampled in {steps} steps",
 #            )
 #
-#        if is_train:
-#            pl_module.train()
+        if is_train:
+            pl_module.train()
