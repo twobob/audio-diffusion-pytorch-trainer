@@ -12,7 +12,7 @@ from audio_data_pytorch.utils import fractional_random_split
 from audio_diffusion_pytorch import AudioDiffusionAutoencoder, Sampler, Schedule
 from einops import rearrange
 from pytorch_lightning import Callback, Trainer
-from pytorch_lightning.loggers import LoggerCollection, WandbLogger
+from pytorch_lightning.loggers import WandbLogger
 from torch import LongTensor, Tensor, nn
 from torch.utils.data import DataLoader
 from transformers import GPT2Config, GPT2LMHeadModel
@@ -167,8 +167,8 @@ def get_wandb_logger(trainer: Trainer) -> Optional[WandbLogger]:
     if isinstance(trainer.logger, WandbLogger):
         return trainer.logger
 
-    if isinstance(trainer.logger, LoggerCollection):
-        for logger in trainer.logger:
+    else: 
+        for logger in trainer.loggers:
             if isinstance(logger, WandbLogger):
                 return logger
 
