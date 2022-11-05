@@ -124,7 +124,7 @@ def get_wandb_logger(trainer: Trainer) -> Optional[WandbLogger]:
     if isinstance(trainer.logger, WandbLogger):
         return trainer.logger
 
-    else: 
+    else:
         for logger in trainer.loggers:
             if isinstance(logger, WandbLogger):
                 return logger
