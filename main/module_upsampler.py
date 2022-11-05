@@ -15,7 +15,7 @@ from audio_diffusion_pytorch.utils import downsample, upsample
 from einops import rearrange
 from ema_pytorch import EMA
 from pytorch_lightning import Callback, Trainer
-from pytorch_lightning.loggers import LoggerCollection, WandbLogger
+from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.utilities import rank_zero_only
 from torch import Tensor, nn, optim
 from torch.utils.data import DataLoader
@@ -128,8 +128,8 @@ def get_wandb_logger(trainer: Trainer) -> Optional[WandbLogger]:
     if isinstance(trainer.logger, WandbLogger):
         return trainer.logger
 
-    if isinstance(trainer.logger, LoggerCollection):
-        for logger in trainer.logger:
+    else: 
+        for logger in trainer.loggers:
             if isinstance(logger, WandbLogger):
                 return logger
 
