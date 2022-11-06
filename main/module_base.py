@@ -95,11 +95,11 @@ class Datamodule(pl.LightningDataModule):
     def setup(self, stage: Any = None) -> None:
         split = [1.0 - self.val_split, self.val_split]
         self.data_train, self.data_val = fractional_random_split(self.dataset, split)
-        self.log("self.data_train length",len(self.data_train))
-        self.log("self.data_val length", len(self.data_val))
+        print("self.data_train length",len(self.data_train))
+        print("self.data_val length", len(self.data_val))
 
     def train_dataloader(self) -> DataLoader:
-        self.log('self.data_train length', len(self.data_train))
+        print('self.data_train length', len(self.data_train))
         return DataLoader(
             dataset=self.data_train,
             batch_size=self.batch_size,
@@ -109,7 +109,7 @@ class Datamodule(pl.LightningDataModule):
         )
 
     def val_dataloader(self) -> DataLoader:
-        self.log('self.data_val length', len(self.data_val))
+        print('self.data_val length', len(self.data_val))
         return DataLoader(
             dataset=self.data_val,
             batch_size=self.batch_size,
