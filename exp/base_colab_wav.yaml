@@ -5,7 +5,7 @@
 sampling_rate: 48000
 length: 262144
 channels: 2
-log_every_n_steps: 1000
+log_every_n_steps: 500
 
 model:
   _target_: main.module_base.Model
@@ -48,9 +48,9 @@ datamodule:
       _target_: audio_data_pytorch.AllTransform
       random_crop_size: ${length}
       stereo: True
-  val_split: 0.0001
-  batch_size: 32
-  num_workers: 8
+  val_split: 0.3
+  batch_size: 11
+  num_workers: 2
   pin_memory: True
 
 callbacks:
