@@ -1,0 +1,125 @@
+# @package _global_
+source_rate: 44100
+sampling_rate: 6300
+length: 131072
+channels: 2
+log_every_n_steps: 1000
+
+model:
+  _target_: main.module_diff_genrecond.Model
+  lr: 1e-4
+  lr_beta1: 0.95
+  lr_beta2: 0.999
+  lr_eps: 1e-6
+  lr_weight_decay: 1e-3
+  ema_beta: 0.995
+  ema_power: 0.7
+  num_artists: 2549
+  num_genres: 70
+  artist_genre_embedding_dim: 300
+
+
+  model:
+    _target_: audio_diffusion_pytorch.AudioDiffusionConditional
+    in_channels: ${channels}
+    channels: 256
+    patch_factor: 32
+    patch_blocks: 1
+    resnet_groups: 8
+    kernel_multiplier_downsample: 2
+    multipliers: [1, 2, 4, 4, 4, 4, 4]
+    factors: [2, 2, 2, 2, 2, 2]
+    num_blocks: [2, 2, 2, 2, 2, 2]
+    attentions: [0, 0, 0, 1, 1, 1, 1]
+    attention_heads: 16
+    attention_features: 128
+    attention_multiplier: 4
+    use_nearest_upsample: False
+    use_skip_scale: True
+    diffusion_type: v
+    diffusion_sigma_distribution:
+      _target_: audio_diffusion_pytorch.UniformDistribution
+    embedding_features: 300
+    embedding_max_length: 2549
+    
+
+
+batch_size: 23
+datamodule:
+  _target_: main.module_ae.Datamodule
+  dataset:
+    _target_: audio_data_pytorch.WAVDataset
+    path: /mnt/wsl/PhysicalDrive2/Playlist
+    metadata_mapping_path: mappings.json
+    recursive: True
+    source_rate: ${source_rate}
+    sample_rate: ${sampling_rate}
+    transforms:
+      _target_: audio_data_pytorch.AllTransform
+      random_crop_size: ${length}
+      stereo: True
+      source_rate: ${sampling_rate}
+      target_rate: ${sampling_rate}
+      loudness: -20
+
+  val_split: 0.01
+  batch_size: 23
+  num_workers: 11
+  pin_memory: True
+
+callbacks:
+  rich_progress_bar:
+    _target_: pytorch_lightning.callbacks.RichProgressBar
+
+  model_checkpoint:
+    _target_: pytorch_lightning.callbacks.ModelCheckpoint
+    #monitor: "valid_loss"   # name of the logged metric which determines when model is improving
+    #save_top_k: 1           # save k best models (determined by above metric)
+    #save_last: True         # additionaly always save model from last epoch
+    #mode: "min"             # can be "max" or "min"
+    every_n_epochs: 4      # save every n epochs
+    verbose: False
+    dirpath: ${logs_dir}/ckpts/${now:%Y-%m-%d-%H-%M-%S}
+    filename: 'last'
+
+  model_summary:
+    _target_: pytorch_lightning.callbacks.RichModelSummary
+    max_depth: 2
+
+  audio_samples_logger:
+    _target_: main.module_diff_genrecond.SampleLogger
+    num_items: 3
+    channels: ${channels}
+    sampling_rate: ${sampling_rate}
+    length: ${length}
+    sampling_steps: [3,5,25]
+    embedding_scale: 15.0
+    use_ema_model: True
+    diffusion_sampler:
+      _target_: audio_diffusion_pytorch.VSampler
+    diffusion_schedule:
+      _target_: audio_diffusion_pytorch.LinearSchedule
+
+loggers:
+  wandb:
+    _target_: pytorch_lightning.loggers.wandb.WandbLogger
+    project: ${oc.env:WANDB_PROJECT}
+    entity: ${oc.env:WANDB_ENTITY}
+    # offline: False  # set True to store all logs only locally
+    job_type: "train"
+    group: ""
+    save_dir: ${logs_dir}
+
+trainer:
+  _target_: pytorch_lightning.Trainer
+  gpus: 1 # Set `1` to train on GPU, `0` to train on CPU only, and `-1` to train on all GPUs, default `0`
+  precision: bf16 # Precision used for tensors, default `32`
+  accelerator: null # `ddp` GPUs train individually and sync gradients, default `None`
+  min_epochs: 0
+  max_epochs: -1
+  enable_model_summary: False
+  log_every_n_steps: 1 # Logs metrics every N batches
+  check_val_every_n_epoch: null
+  limit_val_batches: 20
+  val_check_interval: ${log_every_n_steps}
+  accumulate_grad_batches: 2

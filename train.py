@@ -5,6 +5,7 @@ import hydra
 import pytorch_lightning as pl
 from main import utils
 from omegaconf import DictConfig, open_dict
+import torch
 
 # Load environment variables from `.env`.
 dotenv.load_dotenv(override=True)
@@ -13,6 +14,14 @@ log = utils.get_logger(__name__)
 
 @hydra.main(config_path=".", config_name="config.yaml", version_base=None)
 def main(config: DictConfig) -> None:
+    if torch.cuda.is_available():
+        print("cudnn benchmark was ", torch.backends.cudnn.benchmark)
+        torch.backends.cudnn.benchmark = True
+        print("matmul allow_tf32 was ", torch.backends.cuda.matmul.allow_tf32)
+        torch.backends.cuda.matmul.allow_tf32 = True
+        print("cudnn allow_tf32 was ", torch.backends.cudnn.allow_tf32)
+        torch.backends.cudnn.allow_tf32 = True
+        
 
     # Logs config tree
     utils.extras(config)
