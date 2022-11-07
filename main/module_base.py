@@ -95,7 +95,7 @@ class Datamodule(pl.LightningDataModule):
     def setup(self, stage: Any = None) -> None:
         split = [1.0 - self.val_split, self.val_split]
         self.data_train, self.data_val = fractional_random_split(self.dataset, split)
-        assert self.dataset >= self.batch_size * 2, f"self.dataset {self.dataset} should be larger than twice the self.batch_size {self.batch_size}"
+        assert len(self.dataset) >= self.batch_size * 2, f"self.dataset {len(self.dataset)} should be larger than twice the self.batch_size {self.batch_size}"
         if self.data_val < self.batch_size:
             self.data_val = self.batch_size
             self.data_train = self.dataset - self.batch_size
