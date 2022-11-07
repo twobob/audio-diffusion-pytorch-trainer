@@ -92,9 +92,9 @@ datamodule:
       source_rate: 48000
       target_rate: ${sampling_rate}
       random_crop_size: ${length}
-  val_split: 0.0005
-  batch_size: 8
-  num_workers: 8
+  val_split: 0.01
+  batch_size: 10
+  num_workers: 4
   pin_memory: True
 
 callbacks:
