@@ -95,12 +95,13 @@ class Datamodule(pl.LightningDataModule):
     def setup(self, stage: Any = None) -> None:
         split = [1.0 - self.val_split, self.val_split]
         self.data_train, self.data_val = fractional_random_split(self.dataset, split)
-        print("self.val_split frac value", split)
-        print("self.data_train length after frac",len(self.data_train))
-        print("self.data_val length after frac", len(self.data_val))
+        assert self.dataset >= self.batch_size * 2, f"self.dataset {self.dataset} should be larger than twice the self.batch_size {self.batch_size}"
+        if self.data_val < self.batch_size:
+            self.data_val = self.batch_size
+            self.data_train = self.dataset - self.batch_size
+            print(f'reset validation set size to {self.batch_size}, maybe increase dataset val_split:{split} value')
 
     def train_dataloader(self) -> DataLoader:
-        print('self.data_train length', len(self.data_train))
         return DataLoader(
             dataset=self.data_train,
             batch_size=self.batch_size,
@@ -110,7 +111,6 @@ class Datamodule(pl.LightningDataModule):
         )
 
     def val_dataloader(self) -> DataLoader:
-        print('self.data_val length', len(self.data_val))
         return DataLoader(
             dataset=self.data_val,
             batch_size=self.batch_size,
